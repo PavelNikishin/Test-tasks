@@ -1,0 +1,85 @@
+-- SUBTASK A
+
+--Допущения:
+
+--Я изменил date_end канала Media на 2023-02-20. По контексту предположил, что это опечатка и выбрал наиболее правдоподобный вариант. В реальной задаче – спросил бы.
+
+--Как равномерно распределить 3 transaction на 20 дней? На вряд ли дробями. В таких вопросах обычно нет правильного ответа, есть тот о котором договорились с бизнесом. 
+--Я предположил вариант, который возможен и относительно удобен в реализации: Количество действий на день округляется вверх до целого и используется пока не достигнет общей суммы. 
+--Т.е. 3 дня по 1 и 17 дней по 0 в вопросе выше.
+
+--Бюджет распределил пропорционально действиям, предполагая, что стоят они одинаково.  Из-за округления, итог может не совпасть с общей суммой, обычно это никого не смущает.
+
+--Писал в PostgreSQL, в другой СУБД могут быть другие имена функций. 
+
+
+--create data 
+
+--DROP TABLE mediaplan;
+
+CREATE TABLE mediaplan (
+	date_start date NULL,
+	date_end date NULL,
+	channel varchar(50) NULL,
+	budget int4 NULL,
+	transactions int4 NULL
+);
+
+INSERT INTO mediaplan (date_start,date_end,channel,budget,transactions) VALUES
+	 ('2023-01-01','2023-01-31','Context',12645892,1458),
+	 ('2023-01-09','2023-01-31','Social',4365891,356),
+	 ('2023-01-01','2023-01-31','CPA',5897236,680),
+	 ('2023-02-10','2023-02-20','Programmatic',2430000,50),
+	 ('2023-02-01','2023-02-20','Media',1500000,3);
+	
+--main query
+     
+WITH dates as(   
+	SELECT gs::date date 
+	FROM   generate_series(
+			(SELECT MIN(date_start) FROM mediaplan),
+			(SELECT MAX(date_end) FROM mediaplan),
+			'1 day'::interval) gs)
+SELECT  date, date_start, date_end, channel,
+		CASE 
+			WHEN SUM(daily_trans) FILTER(WHERE date >= date_start AND date <= date_end) OVER (PARTITION BY channel ORDER BY date) < transactions_sum 
+				THEN daily_trans * trans_cost
+			WHEN (SUM(daily_trans) FILTER(WHERE date >= date_start AND date <= date_end) OVER (PARTITION BY channel ORDER BY date) - daily_trans) < transactions_sum 
+				THEN (transactions_sum + daily_trans - SUM(daily_trans) FILTER(WHERE date >= date_start AND date <= date_end) OVER (PARTITION BY channel ORDER BY date)) * trans_cost
+			ELSE 0
+		END budget,
+		CASE 
+			WHEN SUM(daily_trans) FILTER(WHERE date >= date_start AND date <= date_end) OVER (PARTITION BY channel ORDER BY date) < transactions_sum 
+				THEN daily_trans
+			WHEN (SUM(daily_trans) FILTER(WHERE date >= date_start AND date <= date_end) OVER (PARTITION BY channel ORDER BY date) - daily_trans) < transactions_sum 
+				THEN transactions_sum + daily_trans - SUM(daily_trans) FILTER(WHERE date >= date_start AND date <= date_end) OVER (PARTITION BY channel ORDER BY date)
+			ELSE 0
+		END transactions
+FROM dates d
+	CROSS JOIN (SELECT  date_start, date_end, channel, transactions AS transactions_sum,
+			  	    	--ROUND(budget::DECIMAL / (date_end::DATE - date_start::DATE + 1), 2) daily_budget,
+			   			CEIL(transactions::DECIMAL / (date_end::DATE - date_start::DATE + 1)) daily_trans,  
+			   			ROUND(budget::DECIMAL / transactions, 2) trans_cost
+				FROM mediaplan) c
+WHERE date >= date_start AND date <= date_end
+ORDER BY date, channel;
+
+
+-- SUBTASK B
+	
+--DROP TABLE calendar;
+
+CREATE TABLE calendar (
+	date date NOT NULL PRIMARY KEY
+);
+
+INSERT INTO calendar 
+SELECT  gs::date date
+FROM  generate_series(
+		current_date - 364 , -- interval '1 year' если нужен год, а не 365д
+		current_date,
+		'1 day'::INTERVAL) gs;	
+
+
+
+

@@ -1,0 +1,14 @@
+-- SUBTASK A
+
+--Если в TABLE только столбец name, то уникальные значения. Иначе - ответит не понятно, что и как агрегировать.
+
+-- SUBTASK B
+
+--Что алиасы из select нельзя использовать в where, т.к. они обрабатываются позже
+
+-- SUBTASK C
+
+SELECT city
+FROM city_population
+ORDER BY population::INT DESC 
+LIMIT 1;
